@@ -581,7 +581,7 @@ INT wifi_hal_send_mgmt_frame_response(int ap_index, int type, int status, int st
 		wifi_hal_error_print("%s:%d: POORNA: [wifi_hal_send_mgmt_frame_response] ACTION: forwarding to hostapd (STATUS_OK)\n",__func__, __LINE__);
         wifi_send_wpa_supplicant_event(ap_index, frame, len);
     } else if (status == MGMT_FRAME_RESPONSE_STATUS_DENY) {
-		printf("POORNA: [wifi_hal_send_mgmt_frame_response] ACTION: sending deny response (STATUS_DENY) status_code=%d\n", status_code);
+		wifi_hal_error_print("%s:%d: POORNA: [wifi_hal_send_mgmt_frame_response] ACTION: sending deny response (STATUS_DENY) status_code=%d\n",__func__, __LINE__, status_code);
         wifi_send_response_failure(ap_index, mac, type, status_code, rssi);
     } else {
         wifi_hal_error_print("%s:%d: POORNA Undefined status\n", __func__, __LINE__);
