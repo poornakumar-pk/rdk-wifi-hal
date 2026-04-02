@@ -570,15 +570,15 @@ INT wifi_hal_hostApGetErouter0Mac(char *out)
 INT wifi_hal_send_mgmt_frame_response(int ap_index, int type, int status, int status_code, uint8_t *frame, uint8_t *mac, int len, int rssi)
 {
     if (mac) {
-        printf("POORNA: [wifi_hal_send_mgmt_frame_response] ENTRY ap_index=%d type=%d status=%d status_code=%d rssi=%d mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
-               ap_index, type, status, status_code, rssi,
+       wifi_hal_error_print("%s:%d: POORNA: [wifi_hal_send_mgmt_frame_response] ENTRY ap_index=%d type=%d status=%d status_code=%d rssi=%d mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
+               __func__, __LINE__,ap_index, type, status, status_code, rssi,
                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     } else {
-        printf("POORNA: [wifi_hal_send_mgmt_frame_response] ENTRY ap_index=%d type=%d status=%d status_code=%d rssi=%d mac=NULL\n",
-               ap_index, type, status, status_code, rssi);
+        wifi_hal_error_print("%s:%d: POORNA: [wifi_hal_send_mgmt_frame_response] ENTRY ap_index=%d type=%d status=%d status_code=%d rssi=%d mac=NULL\n",
+               __func__, __LINE__,ap_index, type, status, status_code, rssi);
     }
     if (status == MGMT_FRAME_RESPONSE_STATUS_OK) {
-		printf("POORNA: [wifi_hal_send_mgmt_frame_response] ACTION: forwarding to hostapd (STATUS_OK)\n");
+		wifi_hal_error_print("%s:%d: POORNA: [wifi_hal_send_mgmt_frame_response] ACTION: forwarding to hostapd (STATUS_OK)\n",__func__, __LINE__);
         wifi_send_wpa_supplicant_event(ap_index, frame, len);
     } else if (status == MGMT_FRAME_RESPONSE_STATUS_DENY) {
 		printf("POORNA: [wifi_hal_send_mgmt_frame_response] ACTION: sending deny response (STATUS_DENY) status_code=%d\n", status_code);
@@ -597,10 +597,10 @@ void wifi_hal_deauth(int vap_index, int status, uint8_t *mac)
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
     struct hostapd_data *hapd = &interface->u.ap.hapd;
     if (mac) {
-        printf("POORNA: [wifi_hal_deauth] ENTRY vap_index=%d reason=%d mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
-               vap_index, status, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        wifi_hal_error_print("%s:%d: POORNA: [wifi_hal_deauth] ENTRY vap_index=%d reason=%d mac=%02x:%02x:%02x:%02x:%02x:%02x\n",
+               __func__, __LINE__,vap_index, status, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     } else {
-        printf("POORNA: [wifi_hal_deauth] ENTRY vap_index=%d reason=%d mac=NULL\n", vap_index, status);
+        wifi_hal_error_print("%s:%d: POORNA: [wifi_hal_deauth] ENTRY vap_index=%d reason=%d mac=NULL\n",__func__, __LINE__, vap_index, status);
     }
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
@@ -4258,11 +4258,11 @@ void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
     struct hostapd_data *hapd = &interface->u.ap.hapd;
     if (mac) {
-        printf("POORNA: [wifi_hal_disassoc] ENTRY vap_index=%d reason=%d mac=%02x:%02x:%02x:%02x:%02x:%02x (WARNING: should be wifi_hal_deauth for CAC post-assoc eviction)\n",
-               vap_index, status, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+        wifi_hal_error_print("%s:%d: POORNA: [wifi_hal_disassoc] ENTRY vap_index=%d reason=%d mac=%02x:%02x:%02x:%02x:%02x:%02x (WARNING: should be wifi_hal_deauth for CAC post-assoc eviction)\n",
+               __func__, __LINE__,vap_index, status, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     } else {
-        printf("POORNA: [wifi_hal_disassoc] ENTRY vap_index=%d reason=%d mac=NULL (WARNING: should be wifi_hal_deauth for CAC post-assoc eviction)\n",
-              vap_index, status);
+        wifi_hal_error_print("%s:%d: POORNA: [wifi_hal_disassoc] ENTRY vap_index=%d reason=%d mac=NULL (WARNING: should be wifi_hal_deauth for CAC post-assoc eviction)\n",
+              __func__, __LINE__,vap_index, status);
     }
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
