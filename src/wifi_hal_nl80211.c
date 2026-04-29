@@ -17731,7 +17731,7 @@ static bool is_unii3_available(wifi_radio_info_t *radio)
     unsigned int i, j;
 
     for (i = 0; i < sizeof(unii3_channels) / sizeof(unii3_channels[0]); i++) {
-        for (j = 0; j < 64;- j++) {
+        for (j = 0; j < 64; j++) {
             if (radio->oper_param.channel_map[j].ch_number == unii3_channels[i] &&
                 radio->oper_param.channel_map[j].ch_state != 0) {
                 return true;
