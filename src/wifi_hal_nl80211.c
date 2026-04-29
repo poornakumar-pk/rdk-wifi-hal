@@ -17723,30 +17723,84 @@ int wifi_drv_commit(void *priv)
 }
 
 #if defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL)
-//Selects a Non-DFS Channel from the list of available channels
+/* regulatory channel map, indicating the region permits UNII-3 operation. */
+static bool is_unii3_available(wifi_radio_info_t *radio)
+{
+    /* UNII-3 5GHz channel numbers */
+    static const int unii3_channels[] = { 149, 153, 157, 161, 165 };
+    unsigned int i, j;
+
+    for (i = 0; i < sizeof(unii3_channels) / sizeof(unii3_channels[0]); i++) {
+        for (j = 0; j < 64;- j++) {
+            if (radio->oper_param.channel_map[j].ch_number == unii3_channels[i] &&
+                radio->oper_param.channel_map[j].ch_state != 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* Selects the radar evacuation channel per policy:
+ *   Single 5G radio (WIFI_FREQUENCY_5_BAND)       -> channel 44 / 80MHz
+ *   Lower split-5G radio (WIFI_FREQUENCY_5L_BAND) -> channel 44 / 80MHz
+ *   Upper split-5G radio (WIFI_FREQUENCY_5H_BAND) -> channel 157 / 80MHz
+ *   if UNII-3 is available in the region;  otherwise default fallback.
+ */
 short get_non_dfs_chan(wifi_interface_info_t *interface, u8 *oper_centr_freq_seg0_idx, u8 *oper_centr_freq_seg1_idx,
                                               int *secondary_channel)
 {
     struct hostapd_channel_data *chan = NULL;
-#if HOSTAPD_VERSION >= 210 // 2.10
+    wifi_radio_info_t *radio;
+    wifi_freq_bands_t band;
 
-    wifi_hal_error_print("%s:%d DFS: Radar detected — selecting non-DFS-only fallback channel\n", __func__,
-            __LINE__);
-    enum dfs_channel_type channel_type = DFS_NON_DFS_ONLY; //select only non-dfs channel
-
-    chan = dfs_get_valid_channel(&interface->u.ap.iface, secondary_channel,
-                                    oper_centr_freq_seg0_idx,
-                                    oper_centr_freq_seg1_idx,
-                                    channel_type);
-#endif /* HOSTAPD_VERSION >= 210 */
-    if (chan == NULL) {
-        wifi_hal_error_print("%s:%d failed to get new channel, return default\n", __func__,
-            __LINE__);
+    radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+    if (radio == NULL) {
+        wifi_hal_error_print("%s:%d: failed to get radio for index %d, returning default channel 36\n",
+            __func__, __LINE__, interface->vap_info.radio_index);
         return 36;
     }
 
-    wifi_hal_info_print("%s:%d Selected non-dfs channel:%u \n", __FUNCTION__, __LINE__, chan->chan);
+	band = radio->oper_param.band;
 
+    /* Single 5GHz or lower split-5G radio: always evacuate to channel 44 / 80MHz */
+    if (band == WIFI_FREQUENCY_5_BAND || band == WIFI_FREQUENCY_5L_BAND) {
+        wifi_hal_info_print("%s:%d: DFS radar — %s 5G radio, evacuating to channel 44 (80MHz)\n",
+            __func__, __LINE__,
+            (band == WIFI_FREQUENCY_5L_BAND) ? "lower split" : "single");
+        return 44;
+    }
+
+    /* Upper split-5G radio: prefer channel 157 / 80MHz when UNII-3 is available in region */
+    if (band == WIFI_FREQUENCY_5H_BAND) {
+        if (is_unii3_available(radio)) {
+            wifi_hal_info_print("%s:%d: DFS radar — upper split 5G radio, UNII-3 available, evacuating to channel 157 (80MHz)\n",
+                __func__, __LINE__);
+            return 157;
+        }
+        wifi_hal_info_print("%s:%d: DFS radar — upper split 5G radio, UNII-3 not available, using default fallback\n",
+            __func__, __LINE__);
+    }
+
+    /* Default: ask hostapd for a clean non-DFS channel */
+#if HOSTAPD_VERSION >= 210 // 2.10
+    {
+        enum dfs_channel_type channel_type = DFS_NON_DFS_ONLY;
+
+        chan = dfs_get_valid_channel(&interface->u.ap.iface, secondary_channel,
+                                        oper_centr_freq_seg0_idx,
+                                        oper_centr_freq_seg1_idx,
+                                        channel_type);
+    }
+#endif /* HOSTAPD_VERSION >= 210 */
+
+    if (chan == NULL) {
+        wifi_hal_error_print("%s:%d: failed to get new channel, returning default channel 36\n",
+            __func__, __LINE__);
+        return 36;
+    }
+
+    wifi_hal_info_print("%s:%d: Selected non-DFS fallback channel: %u\n", __FUNCTION__, __LINE__, chan->chan);
     return chan->chan;
 }
 #endif /* defined(CMXB7_PORT) || defined(FEATURE_HOSTAP_MGMT_FRAME_CTRL) */
@@ -18027,7 +18081,8 @@ int nl80211_start_dfs_cac(wifi_radio_info_t *radio)
 Fail:
     radio_param = radio->oper_param;
     radio_param.channel = get_non_dfs_chan(interface, &seg0, &seg1, &sec_chan_offset);
-
+    /* Always evacuate at 80MHz per radar evacuation policy */
+    radio_param.channelWidth = WIFI_CHANNELBANDWIDTH_80MHZ;
     wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d \n", radio_param.channel, seg0, seg1, sec_chan_offset);
     if( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, &radio_param) ) {
         wifi_hal_error_print("nl80211-%s:%d wifi_hal_setRadioOperatingParameters Failed \n", __func__, __LINE__);
@@ -18135,14 +18190,9 @@ int nl80211_dfs_radar_cac_aborted(wifi_interface_info_t *interface, int freq, in
     }
 
     radio_param.channel = get_non_dfs_chan(interface, &oper_centr_freq_seg0_idx, &oper_centr_freq_seg1_idx, &sec_chan_offset);
-    radio_param.channelWidth = bandwidth;
+    /* Always evacuate at 80MHz per radar evacuation policy */
+    radio_param.channelWidth = WIFI_CHANNELBANDWIDTH_80MHZ;
     interface->u.ap.iface.dfs_cac_ms = 0;
-
-    if(bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
-        wifi_channelBandwidth_t Chan_width_80MHz = WIFI_CHANNELBANDWIDTH_80MHZ;
-        wifi_hal_info_print("nl80211-%s:%d Setting bandwidth as 80MHz \n", __func__, __LINE__);
-        radio_param.channelWidth = Chan_width_80MHz;
-    }
 
     wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d dfs_cac_ms:%u \n", radio_param.channel, oper_centr_freq_seg0_idx, oper_centr_freq_seg1_idx, sec_chan_offset,
                         interface->u.ap.iface.dfs_cac_ms);
@@ -18275,13 +18325,10 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
 
     radio_param->channel = get_non_dfs_chan(interface, &oper_centr_freq_seg0_idx,
         &oper_centr_freq_seg1_idx, &sec_chan_offset);
-    radio_param->channelWidth = bandwidth;
-
+    /* Always evacuate at 80MHz per radar evacuation policy */
+    radio_param->channelWidth = WIFI_CHANNELBANDWIDTH_80MHZ;
     if (bandwidth == WIFI_CHANNELBANDWIDTH_160MHZ) {
-        wifi_channelBandwidth_t Chan_width_80MHz = WIFI_CHANNELBANDWIDTH_80MHZ;
-        wifi_hal_info_print("%s:%d Setting bandwidth to 80MHz\n", __func__, __LINE__);
-        radio_param->channelWidth = Chan_width_80MHz;
-        // restore original bandwidth to avoid beacon change before channel switch
+        // restore original hostapd bandwidth config to avoid beacon change before channel switch
         hostapd_set_oper_chwidth(interface->u.ap.hapd.iconf, orig_chan_width);
         interface->u.ap.iface.conf->secondary_channel = orig_secondary_chan;
     }
