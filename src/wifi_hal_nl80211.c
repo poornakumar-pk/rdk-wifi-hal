@@ -18403,6 +18403,8 @@ int nl80211_dfs_nop_finished (wifi_interface_info_t *interface, int freq, int ht
 {
     wifi_hal_info_print("%s:%d name:%s freq:%d cf1:%d cf2:%d sec_chan:%d bandwidth:%d ht_enabled:%d \n", __func__, __LINE__,
                 interface->name, freq, cf1, cf2, sec_chan_offset, bw, ht_enabled);
+    wifi_hal_info_print("[DFS_FLOW] %s:%d nop_finished if=%s radio=%d freq=%d cf1=%d cf2=%d bw=%d\n",
+        __func__, __LINE__, interface->name, interface->vap_info.radio_index, freq, cf1, cf2, bw);
 #ifdef CMXB7_PORT
     if (update_channel_flags() != 0) {
         wifi_hal_error_print("%s:%d update_channel_flags failed \n", __func__, __LINE__);
@@ -18426,6 +18428,8 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
 
     wifi_hal_info_print("%s:%d name:%s freq:%d cf1:%d cf2:%d sec_chan:%d bandwidth:%d ht_enabled:%d \n", __func__, __LINE__,
                     interface->name, freq, cf1, cf2, sec_chan_offset, bw, ht_enabled);
+    wifi_hal_info_print("[DFS_FLOW] %s:%d radar_detected if=%s radio=%d freq=%d cf1=%d cf2=%d bw=%d\n",
+        __func__, __LINE__, interface->name, interface->vap_info.radio_index, freq, cf1, cf2, bw);
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
 
@@ -18474,6 +18478,9 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
     wifi_hal_info_print("Radio will switch to a new channel %d seg0:%u seg1:%u sec_chan_offset:%d \n", radio_param->channel, oper_centr_freq_seg0_idx, oper_centr_freq_seg1_idx, sec_chan_offset);
+    wifi_hal_info_print("[DFS_FLOW] %s:%d radar_detected switch if=%s radio=%d old_ch=%d new_ch=%d width=%d\n",
+        __func__, __LINE__, interface->name, interface->vap_info.radio_index,
+        radio->oper_param.channel, radio_param->channel, radio_param->channelWidth);
 
     if ( wifi_hal_setRadioOperatingParameters(interface->vap_info.radio_index, radio_param) ) {
         wifi_hal_error_print("%s %d wifi_hal_setRadioOperatingParameters failed \n", __FUNCTION__, __LINE__);

@@ -965,6 +965,8 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
 
     wifi_hal_dbg_print("%s:%d: wifi_chan_event_type: %d interface: %s\n", __func__, __LINE__,
         wifi_chan_event_type, interface->name);
+    wifi_hal_info_print("[DFS_FLOW] %s:%d ch_switch_notify enter if=%s radio=%d event=%d\n",
+        __func__, __LINE__, interface->name, interface->vap_info.radio_index, wifi_chan_event_type);
 
     memset(&radio_channel_param, 0, sizeof(radio_channel_param));
 
@@ -1018,6 +1020,9 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
     if (is_channel_supported_on_radio(radio_param->band, freq) != true) {
         wifi_hal_info_print("%s:%d: channel:%d and radio index:%d radio_band:%d not Compatible\n", __func__, __LINE__,
                                     channel, interface->vap_info.radio_index, radio_param->band);
+        wifi_hal_info_print("[DFS_FLOW] %s:%d incompatible channel=%d freq=%d if=%s radio=%d band=%d\n",
+            __func__, __LINE__, channel, freq, interface->name, interface->vap_info.radio_index,
+            radio_param->band);
         return;
     }
 
@@ -1171,7 +1176,14 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         radio_channel_param.channel = channel;
         radio_channel_param.channelWidth = l_channel_width;
         radio_channel_param.op_class = op_class;
+        wifi_hal_info_print("[DFS_FLOW] %s:%d cb channel_change radio=%d event=%d sub_event=%d ch=%d bw=%d op_class=%d\n",
+            __func__, __LINE__, radio_channel_param.radioIndex, radio_channel_param.event,
+            radio_channel_param.sub_event, radio_channel_param.channel,
+            radio_channel_param.channelWidth, radio_channel_param.op_class);
         callbacks->channel_change_event_callback(radio_channel_param);
+    } else if (radio_channel_param.sub_event == WIFI_EVENT_RADAR_NOP_FINISHED) {
+        wifi_hal_info_print("[DFS_FLOW] %s:%d skip channel_change callback for NOP_FINISHED if=%s radio=%d ch=%d\n",
+            __func__, __LINE__, interface->name, interface->vap_info.radio_index, channel);
     }
 
 }
@@ -1280,6 +1292,10 @@ static void nl80211_dfs_radar_event(wifi_interface_info_t *interface, struct nla
     if (tb[NL80211_ATTR_RADAR_EVENT]) {
         event_type = nla_get_u32(tb[NL80211_ATTR_RADAR_EVENT]);
     }
+
+    wifi_hal_info_print("[DFS_FLOW] %s:%d dfs_radar_event if=%s radio=%d event_type=%d freq=%d cf1=%d cf2=%d bw=%d resolved_bw=%d\n",
+        __func__, __LINE__, interface->name, interface->vap_info.radio_index, event_type,
+        freq, cf1, cf2, bw, bandwidth);
 
     if ((radio->oper_param.band == WIFI_FREQUENCY_5L_BAND) || (radio->oper_param.band == WIFI_FREQUENCY_5H_BAND)) {
         if (is_chan_freq_supported_on_radio(radio, freq) == false) {
