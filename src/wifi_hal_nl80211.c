@@ -12782,6 +12782,7 @@ static int nl80211_send_frame_cmd(wifi_interface_info_t *interface, unsigned int
     ret = nl80211_send_and_recv(msg, cookie_handler, &cookie, NULL, NULL);
     msg = NULL;
     if (ret) {
+        wifi_hal_info_print("POORNA %s:%d [L8 KERNEL] ERROR NL80211_CMD_FRAME failed ret=%d (%s) freq=%u\n", __func__, __LINE__, ret, strerror(-ret), freq);
         wifi_hal_info_print("nl80211: Frame command failed: ret=%d (%s) (freq=%u )\n",
                            ret, strerror(-ret), freq);
     } else {
@@ -12806,6 +12807,8 @@ static int wifi_sta_remove(wifi_interface_info_t *interface,
         interface->name, deauth ? "deauth" : "disassoc", to_mac_str(interface->mac, src_mac_str),
         to_mac_str(addr, dst_mac_str), reason_code);
 
+    wifi_hal_info_print("POORNA %s:%d [L7 DRV] wifi_sta_remove -> NL80211_CMD_DEL_STATION subtype=%s reason_code=%d to=%s (LAST software point; firmware builds+encrypts OTA frame under PMF on 6GHz)\n", __func__, __LINE__, deauth ? "DEAUTH" : "DISASSOC", reason_code, to_mac_str(addr, dst_mac_str));
+
     if (!(msg = nl80211_drv_cmd_msg(g_wifi_hal.nl80211_id, interface, 0,
             NL80211_CMD_DEL_STATION)) ||
             nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, addr) ||
@@ -12817,14 +12820,18 @@ static int wifi_sta_remove(wifi_interface_info_t *interface,
             WLAN_FC_STYPE_DEAUTH)) ||
             (reason_code &&
             nla_put_u16(msg, NL80211_ATTR_REASON_CODE, reason_code))) {
+        wifi_hal_error_print("POORNA %s:%d [L7 DRV] ERROR wifi_sta_remove failed to build DEL_STATION nlmsg (ENOBUFS) reason=%d\n", __func__, __LINE__, reason_code);
         nlmsg_free(msg);
         return -ENOBUFS;
     }
 
     ret = nl80211_send_and_recv(msg, NULL, NULL, NULL, NULL);
     if (ret < 0) {
+        wifi_hal_error_print("POORNA %s:%d [L7 DRV] ERROR wifi_sta_remove DEL_STATION send failed ret=%d (%s) reason=%d\n", __func__, __LINE__, ret, strerror(-ret), reason_code);
         wifi_hal_error_print("%s:%d: failed to sent deauth/disassoc, error:%d (%s)\n", __func__,
             __LINE__, ret, strerror(-ret));
+    } else {
+        wifi_hal_info_print("POORNA %s:%d [L7->L8 DRV->KERNEL] wifi_sta_remove DEL_STATION accepted ret=%d reason=%d (kernel/firmware now emits the OTA disassoc/deauth; reason is inside the PMF-encrypted body)\n", __func__, __LINE__, ret, reason_code);
     }
 
     if (ret == -ENOENT) {
@@ -13779,11 +13786,13 @@ int wifi_drv_send_mlme(void *priv, const u8 *data,
             wifi_hal_info_print("%s:%d: interface:%s send disassoc frame from:%s to:%s sc:%d\n",
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, src_mac_str),
                 to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.disassoc.reason_code));
+            wifi_hal_info_print("POORNA %s:%d [L7 DRV] send_mlme DISASSOC reason=%d to=%s device_ap_sme=%d (host-SME path; mac80211 encrypts if PMF)\n", __func__, __LINE__, le_to_host16(mgmt->u.disassoc.reason_code), to_mac_str(mgmt->da, dst_mac_str), drv->device_ap_sme);
             break;
         case WLAN_FC_STYPE_DEAUTH:
             wifi_hal_info_print("%s:%d: interface:%s send deauth frame from:%s to:%s sc:%d\n",
                 __func__, __LINE__, interface->name, to_mac_str(mgmt->sa, src_mac_str),
                 to_mac_str(mgmt->da, dst_mac_str), le_to_host16(mgmt->u.deauth.reason_code));
+            wifi_hal_info_print("POORNA %s:%d [L7 DRV] send_mlme DEAUTH reason=%d to=%s device_ap_sme=%d (host-SME path; mac80211 encrypts if PMF)\n", __func__, __LINE__, le_to_host16(mgmt->u.deauth.reason_code), to_mac_str(mgmt->da, dst_mac_str), drv->device_ap_sme);
             break;
         case WLAN_FC_STYPE_ACTION:
             wifi_hal_dbg_print("%s:%d: interface:%s send action frame from:%s to:%s cat:%d\n",
@@ -13840,6 +13849,10 @@ send_frame_cmd:
     }
 
     //wifi_hal_dbg_print("nl80211: send_mlme -> send_frame_cmd\n");
+    if (WLAN_FC_GET_TYPE(fc) == WLAN_FC_TYPE_MGMT &&
+        (WLAN_FC_GET_STYPE(fc) == WLAN_FC_STYPE_DISASSOC || WLAN_FC_GET_STYPE(fc) == WLAN_FC_STYPE_DEAUTH)) {
+        wifi_hal_info_print("POORNA %s:%d [L8 KERNEL] send_mlme -> nl80211_send_frame_cmd NL80211_CMD_FRAME freq=%u fc=0x%x (frame handed to mac80211/driver for PMF-encrypted OTA TX)\n", __func__, __LINE__, freq, fc);
+    }
     res = nl80211_send_frame_cmd(interface, freq, wait, data, data_len, use_cookie, offchanok,
         noack, csa_offs, csa_offs_len, link_id);
 
@@ -13972,7 +13985,9 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
         }
     }
 #endif // _PLATFORM_RASPBERRYPI_ || _PLATFORM_BANANAPI_R4_
+    wifi_hal_info_print("POORNA %s:%d [L6 DRV] wifi_drv_sta_disassoc reason=%d mac=%s device_ap_sme=%d path=%s\n", __func__, __LINE__, reason, to_mac_str(addr, mac_str), drv->device_ap_sme, drv->device_ap_sme ? "sta_remove/DEL_STATION(firmware+PMF)" : "send_mlme(host-SME)");
     if (drv->device_ap_sme) {
+        wifi_hal_info_print("POORNA %s:%d [L6->L7 DRV] wifi_drv_sta_disassoc -> wifi_sta_remove DISASSOC reason=%d (firmware builds+encrypts OTA frame under PMF)\n", __func__, __LINE__, reason);
         return wifi_sta_remove(interface, addr, 0, reason);
     }
 
@@ -13983,6 +13998,7 @@ int wifi_drv_sta_disassoc(void *priv, const u8 *own_addr, const u8 *addr, u16 re
     memcpy(mgmt.sa, own_addr, ETH_ALEN);
     memcpy(mgmt.bssid, own_addr, ETH_ALEN);
     mgmt.u.disassoc.reason_code = host_to_le16(reason);
+    wifi_hal_info_print("POORNA %s:%d [L7 DRV] wifi_drv_sta_disassoc host-SME build DISASSOC reason_code=%d mac=%s -> wifi_drv_send_mlme(no_encrypt=0)\n", __func__, __LINE__, reason, to_mac_str(addr, mac_str));
 #ifdef HOSTAPD_2_11 //2.11
     return wifi_drv_send_mlme(priv, (u8 *) &mgmt, IEEE80211_HDRLEN + sizeof(mgmt.u.disassoc), 0, 0, NULL, 0, 0, 0, link_id);
 #elif HOSTAPD_2_10 //2.10
@@ -14003,6 +14019,7 @@ int wifi_drv_sta_notify_deauth(void *priv, const u8 *own_addr, const u8 *addr, u
     mac_addr_str_t mac_str;
 
 	wifi_hal_dbg_print("%s:%d: Enter %s %d\n", __func__, __LINE__, to_mac_str(addr, mac_str), reason);
+	wifi_hal_info_print("POORNA %s:%d [L6 DRV] wifi_drv_sta_notify_deauth ENTRY reason=%d mac=%s (event notifier only; not the OTA frame)\n", __func__, __LINE__, reason, to_mac_str(addr, mac_str));
 	
     interface = (wifi_interface_info_t *)priv;
     vap = &interface->vap_info;
@@ -14056,12 +14073,15 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
     radio_param = &radio->oper_param;
     drv = &radio->driver_data;
 
+    wifi_hal_info_print("POORNA %s:%d [L6 DRV] wifi_drv_sta_deauth ENTRY reason=%d mac=%s device_ap_sme=%d\n", __func__, __LINE__, reason, to_mac_str(addr, mac_str), drv->device_ap_sme);
+
     get_coutry_str_from_code(radio_param->countryCode, country);
 
     freq = ieee80211_chan_to_freq(country, radio_param->operatingClass, radio_param->channel);
 
     if (ieee80211_freq_to_chan(freq, &channel) ==
           HOSTAPD_MODE_IEEE80211AD) {
+        wifi_hal_info_print("POORNA %s:%d [L6 DRV] wifi_drv_sta_deauth 802.11ad -> redirect to wifi_drv_sta_disassoc reason=%d\n", __func__, __LINE__, reason);
         /* Deauthentication is not used in DMG/IEEE 802.11ad;
            * disassociate the STA instead. */
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
@@ -14088,6 +14108,7 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
     }
 #endif
     if (drv->device_ap_sme) {
+        wifi_hal_info_print("POORNA %s:%d [L6->L7 DRV] wifi_drv_sta_deauth -> wifi_sta_remove DEAUTH reason=%d (firmware builds+encrypts OTA frame under PMF)\n", __func__, __LINE__, reason);
         return wifi_sta_remove(interface, addr, 1, reason);
     }
 
@@ -14099,6 +14120,7 @@ int wifi_drv_sta_deauth(void *priv, const u8 *own_addr, const u8 *addr, u16 reas
     memcpy(mgmt.bssid, own_addr, ETH_ALEN);
     mgmt.u.deauth.reason_code = host_to_le16(reason);
 	wifi_hal_info_print("%s:%d: Send drv mlme: client mac:%s reason_code:%d\n", __func__, __LINE__, to_mac_str(addr, mac_str), reason);
+    wifi_hal_info_print("POORNA %s:%d [L7 DRV] wifi_drv_sta_deauth host-SME build DEAUTH reason_code=%d mac=%s -> wifi_drv_send_mlme\n", __func__, __LINE__, reason, to_mac_str(addr, mac_str));
 #ifdef HOSTAPD_2_11 //2.11
     return wifi_drv_send_mlme(priv, (u8 *) &mgmt, IEEE80211_HDRLEN + sizeof(mgmt.u.deauth), 0, 0, NULL, 0, 0, 0, link_id);
 #elif HOSTAPD_2_10 //2.10

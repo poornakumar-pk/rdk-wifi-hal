@@ -694,15 +694,25 @@ INT wifi_hal_send_mgmt_frame_response(int ap_index, int type, int status, int st
 void wifi_hal_deauth(int vap_index, int status, uint8_t *mac)
 {
     u8 own_addr[ETH_ALEN];
+    mac_addr_str_t mac_str;
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
-    struct hostapd_data *hapd = &interface->u.ap.hapd;
+    struct hostapd_data *hapd;
+
+    wifi_hal_info_print("POORNA %s:%d [L5 HAL] wifi_hal_deauth ENTRY vap_index=%d status(=reason)=%d mac=%s interface=%p\n", __func__, __LINE__, vap_index, status, to_mac_str(mac, mac_str), interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("POORNA %s:%d [L5 HAL] ERROR wifi_hal_deauth interface NULL vap_index=%d -> deauth NOT sent reason=%d\n", __func__, __LINE__, vap_index, status);
+        return;
+    }
+    hapd = &interface->u.ap.hapd;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 #ifdef HOSTAPD_2_10
+    wifi_hal_info_print("POORNA %s:%d [L5 HAL] wifi_hal_deauth -> wifi_drv_sta_deauth reason=%d mac=%s\n", __func__, __LINE__, status, to_mac_str(mac, mac_str));
     wifi_drv_sta_deauth(interface, own_addr, mac, status);
 #endif
+    wifi_hal_info_print("POORNA %s:%d [L5 HAL] wifi_hal_deauth EXIT vap_index=%d reason=%d\n", __func__, __LINE__, vap_index, status);
     return;
 }
 
@@ -4672,13 +4682,22 @@ int wifi_hal_send_mgmt_frame(int apIndex,mac_address_t sta, const unsigned char 
 void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)
 {
     u8 own_addr[ETH_ALEN];
+    mac_addr_str_t mac_str;
     wifi_interface_info_t *interface = get_interface_by_vap_index(vap_index);
-    struct hostapd_data *hapd = &interface->u.ap.hapd;
+    struct hostapd_data *hapd;
+
+    wifi_hal_info_print("POORNA %s:%d [L5 HAL] wifi_hal_disassoc ENTRY vap_index=%d status(=reason)=%d mac=%s interface=%p\n", __func__, __LINE__, vap_index, status, to_mac_str(mac, mac_str), interface);
+    if (interface == NULL) {
+        wifi_hal_error_print("POORNA %s:%d [L5 HAL] ERROR wifi_hal_disassoc interface NULL vap_index=%d -> disassoc NOT sent reason=%d\n", __func__, __LINE__, vap_index, status);
+        return;
+    }
+    hapd = &interface->u.ap.hapd;
 
     pthread_mutex_lock(&g_wifi_hal.hapd_lock);
     memcpy(own_addr, hapd->own_addr, ETH_ALEN);
     pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
+    wifi_hal_info_print("POORNA %s:%d [L5 HAL] wifi_hal_disassoc -> wifi_drv_sta_disassoc reason=%d mac=%s\n", __func__, __LINE__, status, to_mac_str(mac, mac_str));
 #if defined(BANANA_PI_PORT) && defined(KERNEL_6_6)
 #if HOSTAPD_VERSION >= 211 && defined(CONFIG_GENERIC_MLO)
     int link_id = wifi_hal_get_mld_link_id(interface);
@@ -4689,6 +4708,7 @@ void wifi_hal_disassoc(int vap_index, int status, uint8_t *mac)
 #else
     wifi_drv_sta_disassoc(interface, own_addr, mac, status);
 #endif // BANANA_PI_PORT && KERNEL_6_6
+    wifi_hal_info_print("POORNA %s:%d [L5 HAL] wifi_hal_disassoc EXIT vap_index=%d reason=%d\n", __func__, __LINE__, vap_index, status);
 }
 
 void wifi_hal_set_neighbor_report(uint apIndex,uint add,mac_address_t mac)
