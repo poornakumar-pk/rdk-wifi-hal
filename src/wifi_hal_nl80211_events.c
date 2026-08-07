@@ -993,6 +993,10 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         freq = nla_get_u32(tb[NL80211_ATTR_WIPHY_FREQ]);
         ieee80211_freq_to_chan(freq, &channel);
     }
+    wifi_hal_info_print("[XB10-2939-FLOW] %s:%d ch_switch_notify ENTRY: iface:%s event:%d "
+        "netlink_freq:%d netlink_ch:%d oper_param.channel:%d\n",
+        __func__, __LINE__, interface->name, wifi_chan_event_type,
+        freq, channel, radio ? (int)radio->oper_param.channel : -1);
 
     if(tb[NL80211_ATTR_WIPHY_CHANNEL_TYPE]) {
         ch_type = nla_get_u32(tb[NL80211_ATTR_WIPHY_CHANNEL_TYPE]);
@@ -1042,6 +1046,21 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
 			return;
 		}
 	}
+
+    /* XB10-2939: BCM43684 25.1P1 delivers the lower 80MHz sub-band freq in the
+     * 160MHz RADAR_DETECTED netlink message. Correct to oper_param before any
+     * downstream NOP marking or telemetry consumes the wrong channel. */
+    if (wifi_chan_event_type == WIFI_EVENT_DFS_RADAR_DETECTED &&
+        bw == NL80211_CHAN_WIDTH_160 && channel != (u8)radio_param->channel) {
+        wifi_hal_error_print("[XB10-2939-FIX] %s:%d ch_switch_notify 160MHz sub-band mismatch: "
+            "netlink freq:%d ch:%d cf1:%d  BUT  oper_param.channel:%d — correcting\n",
+            __func__, __LINE__, freq, channel, cf1, radio_param->channel);
+        channel = (u8)radio_param->channel;
+        freq    = 5000 + (int)(channel * 5);
+        cf1     = (channel <= 64) ? 5250 : (channel <= 128) ? 5570 : 5815;
+        wifi_hal_error_print("[XB10-2939-FIX] %s:%d ch_switch_notify corrected: "
+            "freq:%d ch:%d cf1:%d\n", __func__, __LINE__, freq, channel, cf1);
+    }
 
     switch (bw) {
     case NL80211_CHAN_WIDTH_20:
@@ -1185,6 +1204,10 @@ static void nl80211_ch_switch_notify_event(wifi_interface_info_t *interface, str
         radio_channel_param.channel = channel;
         radio_channel_param.channelWidth = l_channel_width;
         radio_channel_param.op_class = op_class;
+        wifi_hal_error_print("[XB10-2939-FLOW] %s:%d ch_switch_notify CALLBACK: iface:%s "
+            "event:%d final_channel:%d channelWidth:%d op_class:%d\n",
+            __func__, __LINE__, interface->name, wifi_chan_event_type,
+            channel, l_channel_width, op_class);
         callbacks->channel_change_event_callback(radio_channel_param);
     }
 
@@ -1301,6 +1324,25 @@ static void nl80211_dfs_radar_event(wifi_interface_info_t *interface, struct nla
                     freq, interface->name);
             return;
         }
+    }
+
+    wifi_hal_error_print("[XB10-2939-FLOW] %s:%d dfs_radar_event PRE-CORRECT: iface:%s "
+        "netlink freq:%d cf1:%d bw:%d event_type:%d  oper_param.channel:%d\n",
+        __func__, __LINE__, interface->name, freq, cf1, bw, event_type,
+        radio->oper_param.channel);
+
+    /* XB10-2939: correct wrong 80MHz sub-band freq in 160MHz RADAR_DETECTED event */
+    if (event_type == NL80211_RADAR_DETECTED && bw == NL80211_CHAN_WIDTH_160 &&
+        freq != 5000 + (int)(radio->oper_param.channel * 5)) {
+        wifi_hal_error_print("[XB10-2939-FIX] %s:%d dfs_radar_event 160MHz sub-band mismatch: "
+            "netlink freq:%d cf1:%d  BUT  oper_param.channel:%d (oper_freq:%d) — correcting\n",
+            __func__, __LINE__, freq, cf1, radio->oper_param.channel,
+            5000 + (int)(radio->oper_param.channel * 5));
+        freq = 5000 + (int)(radio->oper_param.channel * 5);
+        cf1  = (radio->oper_param.channel <= 64) ? 5250 :
+               (radio->oper_param.channel <= 128) ? 5570 : 5815;
+        wifi_hal_error_print("[XB10-2939-FIX] %s:%d dfs_radar_event corrected: "
+            "freq:%d cf1:%d\n", __func__, __LINE__, freq, cf1);
     }
 
     wifi_hal_error_print("%s:%d name:%s freq:%d cf1:%d cf2:%d chan_offset:%d event_type:%d bw:%d bandwidth:%d \n", __func__, __LINE__,
@@ -1833,6 +1875,12 @@ static void do_process_drv_event(wifi_interface_info_t *interface, int cmd, stru
         break;
 
     case NL80211_CMD_RADAR_DETECT:
+        wifi_hal_error_print("[XB10-2939-FLOW] %s:%d NL80211_CMD_RADAR_DETECT: iface:%s "
+            "raw_nl_freq:%u raw_nl_bw:%u raw_nl_radar_event:%u\n",
+            __func__, __LINE__, interface->name,
+            tb[NL80211_ATTR_WIPHY_FREQ]    ? nla_get_u32(tb[NL80211_ATTR_WIPHY_FREQ])    : 0,
+            tb[NL80211_ATTR_CHANNEL_WIDTH] ? nla_get_u32(tb[NL80211_ATTR_CHANNEL_WIDTH]) : 0,
+            tb[NL80211_ATTR_RADAR_EVENT]   ? nla_get_u32(tb[NL80211_ATTR_RADAR_EVENT])   : 0);
         nl80211_ch_switch_notify_event(interface, tb, WIFI_EVENT_DFS_RADAR_DETECTED);
         nl80211_dfs_radar_event(interface, tb);
         break;

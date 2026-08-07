@@ -19177,6 +19177,9 @@ int dfs_chan_change_event(int radio_index, u8 channel, int bw, u8 op_class) {
         radio_channel_param.channel = channel;
         radio_channel_param.channelWidth = bw;
         radio_channel_param.op_class = op_class;
+        wifi_hal_error_print("[XB10-2939-FLOW] %s:%d dfs_chan_change_event CALLBACK: "
+            "radio:%d channel:%d bw:%d op_class:%d\n",
+            __func__, __LINE__, radio_index, channel, bw, op_class);
         callbacks->channel_change_event_callback(radio_channel_param);
     }
 
@@ -19536,10 +19539,17 @@ int nl80211_dfs_radar_detected (wifi_interface_info_t *interface, int freq, int 
     u8 orig_chan_width = 0;
     int orig_secondary_chan = 0;
 
-    wifi_hal_info_print("%s:%d name:%s freq:%d cf1:%d cf2:%d sec_chan:%d bandwidth:%d ht_enabled:%d \n", __func__, __LINE__,
-                    interface->name, freq, cf1, cf2, sec_chan_offset, bw, ht_enabled);
+    wifi_hal_error_print("[XB10-2939-FLOW] %s:%d dfs_radar_detected ENTRY: iface:%s "
+        "freq:%d cf1:%d bw:%d bandwidth:%d\n",
+        __func__, __LINE__, interface->name, freq, cf1, bw, bandwidth);
 
     radio = get_radio_by_rdk_index(interface->vap_info.radio_index);
+
+    wifi_hal_error_print("[XB10-2939-FLOW] %s:%d dfs_radar_detected: oper_param.channel:%d "
+        "oper_freq_expected:%d  match:%s\n",
+        __func__, __LINE__, radio->oper_param.channel,
+        5000 + (int)(radio->oper_param.channel * 5),
+        (freq == 5000 + (int)(radio->oper_param.channel * 5)) ? "YES" : "NO-MISMATCH-SHOULD-NOT-HAPPEN-AFTER-FIX");
 
     if (((radio->oper_param.channel < dfs_start) || (radio->oper_param.channel > dfs_end)) &&
         (bandwidth != WIFI_CHANNELBANDWIDTH_160MHZ)) {
