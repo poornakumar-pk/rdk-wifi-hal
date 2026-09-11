@@ -718,6 +718,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
     platform_set_radio_pre_init_t set_radio_pre_init_fn;
     bool is_channel_changed;
     int ret;
+    int channel_switch_attempt;
 
 #ifdef CMXB7_PORT
     int dfs_start_chan = 52, dfs_end_chan = 144;
@@ -961,7 +962,28 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
             if (is_channel_changed) {
                 wifi_hal_dbg_print("%s:%d: Switch channel on radio index:%d\n", __func__, __LINE__,
                     index);
-                if ((ret = nl80211_switch_channel(radio)) == -1) {
+                for (channel_switch_attempt = 0; channel_switch_attempt < 3;
+                    channel_switch_attempt++) {
+                    wifi_hal_info_print(
+                        "%s:%d: CSA attempt:%d radio:%d channel:%d\n", __func__, __LINE__,
+                        channel_switch_attempt + 1, index, operationParam->channel);
+                    ret = nl80211_switch_channel(radio);
+                    wifi_hal_info_print(
+                        "%s:%d: CSA attempt:%d result:%d radio:%d channel:%d\n", __func__,
+                        __LINE__, channel_switch_attempt + 1, ret, index, operationParam->channel);
+                    if (ret == 0 || (ret != -1 && ret != -EBUSY)) {
+                        break;
+                    }
+
+                    if (channel_switch_attempt < 2) {
+                        wifi_hal_info_print(
+                            "%s:%d: Retry channel switch on radio index:%d after ret:%d\n",
+                            __func__, __LINE__, index, ret);
+                        usleep(20000 * (channel_switch_attempt + 1));
+                    }
+                }
+
+                if (ret == -1 || ret == -EBUSY) {
                     wifi_hal_error_print("%s:%d: Error switching channel\n", __func__, __LINE__);
                     goto reload_config;
                 } else if (ret != 0) {
@@ -1366,6 +1388,11 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
        return RETURN_OK;
     }
 #endif
+    wifi_hal_info_print("%s:%d: VAP config waiting for HAL lock radio:%d vaps:%u\n", __func__,
+        __LINE__, radio->index, map->num_vaps);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    wifi_hal_info_print("%s:%d: VAP config lock acquired radio:%d vaps:%u\n", __func__,
+        __LINE__, radio->index, map->num_vaps);
     if ((pre_set_vap_params_fn = get_platform_pre_create_vap_fn()) != NULL) {
         wifi_hal_info_print("%s:%d: radio index:%d pre-create vap\n", __func__, __LINE__,
             radio->index);
@@ -1382,6 +1409,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         if (vap->vap_mode == wifi_vap_mode_ap) {
             if (validate_wifi_interface_vap_info_params(vap, msg, sizeof(msg)) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d:Failed to validate interface vap_info params for vap_index: %d on radio index: %d. %s\n", __func__, __LINE__, vap->vap_index, index, msg);
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                 return WIFI_HAL_INVALID_ARGUMENTS;
             }
         }
@@ -1459,6 +1487,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         if (nl80211_update_interface(interface) != 0) {
             wifi_hal_error_print("%s:%d: interface:%s failed to set mode %d\n",__func__, __LINE__,
                 interface->name, vap->vap_mode);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
             return RETURN_ERR;
         }
 
@@ -1516,6 +1545,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             if (update_hostap_interface_params(interface) != RETURN_OK) {
                 wifi_hal_error_print("%s:%d: interface:%s failed to update hostapd params\n",
                     __func__, __LINE__, interface->name);
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                 return RETURN_ERR;
             }
 
@@ -1563,6 +1593,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                     if (update_hostap_interface_params(interface) != RETURN_OK) {
                         wifi_hal_error_print("%s:%d: interface:%s failed to update hostapd "
                             "params\n", __func__, __LINE__, interface->name);
+                        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                         return RETURN_ERR;
                     }
 
@@ -1584,6 +1615,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
                 if (update_hostap_interfaces(radio)!= RETURN_OK) {
                     wifi_hal_error_print("%s:%d: radio index:%d failed to update hostapd "
                         "interfaces\n", __func__, __LINE__, radio->index);
+                    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                     return RETURN_ERR;
                 }
                 if (vap->u.bss_info.enabled && radio->configured && radio->oper_param.enable) {
@@ -1685,6 +1717,7 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
             if (wifi_setApMacAddressControlMode(vap->vap_index, filtermode) < 0) {
                 wifi_hal_error_print("%s:%d: vap index:%d failed to set mac filter\n", __func__,
                     __LINE__, vap->vap_index);
+                pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
                 return RETURN_ERR;
             }
             if (set_acl == 1) {
@@ -1718,6 +1751,9 @@ INT wifi_hal_createVAP(wifi_radio_index_t index, wifi_vap_info_map_t *map)
         set_vap_params_fn(index, map);
     }
 
+    wifi_hal_info_print("%s:%d: VAP config complete radio:%d result:%d\n", __func__, __LINE__,
+        radio->index, ret);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return ret;
 }
 

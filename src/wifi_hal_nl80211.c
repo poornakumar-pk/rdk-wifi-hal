@@ -6480,6 +6480,12 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
     int ret = 0;
     bool is_first_interface;
 
+    wifi_hal_info_print("%s:%d: CSA waiting for HAL lock radio:%d\n", __func__, __LINE__,
+        radio->index);
+    pthread_mutex_lock(&g_wifi_hal.hapd_lock);
+    wifi_hal_info_print("%s:%d: CSA lock acquired radio:%d channel:%d\n", __func__, __LINE__,
+        radio->index, radio->oper_param.channel);
+
     param = &radio->oper_param;
     get_coutry_str_from_code(param->countryCode, country);
     freq = ieee80211_chan_to_freq(country, param->operatingClass, param->channel);
@@ -6520,6 +6526,7 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
 
     if (freq1 == -1) {
         wifi_hal_error_print("%s:%d - No center frequency found\n", __func__, __LINE__);
+        pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
         return -1;
     }
 
@@ -6570,15 +6577,24 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
         ret = hostapd_switch_channel(&interface->u.ap.hapd, &csa_settings);
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
 
+        wifi_hal_info_print(
+            "%s:%d: CSA BSS result radio:%d interface:%s first:%d ret:%d\n", __func__,
+            __LINE__, radio->index, interface->name, is_first_interface, ret);
+
         /* Ignore the error if the error is not on first interface,
            as CSA would be in progress after the first interface channel switch. */
         if (ret != 0 && is_first_interface == true) {
             wifi_hal_error_print("%s:%d interface: %s failed to switch channel to %d, error: %d\n",
                 __func__, __LINE__, interface->name, param->channel, ret);
+            pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
             return ret;
         }
         is_first_interface = false;
     }
+
+    wifi_hal_info_print("%s:%d: CSA sequence complete radio:%d channel:%d\n", __func__,
+        __LINE__, radio->index, param->channel);
+    pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
     return 0;
 }
 
