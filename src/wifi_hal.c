@@ -978,6 +978,14 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
 
     is_channel_changed = radio->oper_param.channel != operationParam->channel ||
         radio->oper_param.channelWidth != operationParam->channelWidth;
+    if (is_channel_changed) {
+        wifi_hal_info_print("%s:%d: CHANNEL_CHANGE_BEGIN radio=%d old_channel=%d new_channel=%d "
+            "old_width=%d new_width=%d old_auto=%d new_auto=%d configured=%d enabled=%d\n",
+            __func__, __LINE__, index, radio->oper_param.channel, operationParam->channel,
+            radio->oper_param.channelWidth, operationParam->channelWidth,
+            radio->oper_param.autoChannelEnabled, operationParam->autoChannelEnabled,
+            radio->configured, radio->oper_param.enable);
+    }
     if (radio->configured && radio->oper_param.enable && is_channel_changed) {
         radio->oper_param.channel = operationParam->channel;
         radio->oper_param.operatingClass = operationParam->operatingClass;
@@ -1036,7 +1044,10 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
             if (is_channel_changed) {
                 wifi_hal_dbg_print("%s:%d: Switch channel on radio index:%d\n", __func__, __LINE__,
                     index);
-                if ((ret = nl80211_switch_channel(radio)) == -1) {
+                ret = nl80211_switch_channel(radio);
+                wifi_hal_info_print("%s:%d: CHANNEL_CHANGE_CSA_RESULT radio=%d requested_channel=%d ret=%d\n",
+                    __func__, __LINE__, index, operationParam->channel, ret);
+                if (ret == -1) {
                     wifi_hal_error_print("%s:%d: Error switching channel\n", __func__, __LINE__);
                     goto reload_config;
                 } else if (ret != 0) {
@@ -1106,6 +1117,9 @@ Exit:
     return RETURN_OK;
 
 reload_config:
+    wifi_hal_error_print("%s:%d: CHANNEL_CHANGE_ROLLBACK radio=%d requested_channel=%d restoring_channel=%d\n",
+        __func__, __LINE__, index, operationParam->channel,
+        old_operationParam ? old_operationParam->channel : -1);
     if (radio->configured == true) {
         memcpy((unsigned char *)&radio->oper_param, (unsigned char *)old_operationParam, sizeof(wifi_radio_operationParam_t));
     }

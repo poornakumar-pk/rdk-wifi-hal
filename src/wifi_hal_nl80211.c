@@ -8263,6 +8263,10 @@ static int fill_csa_params(wifi_radio_info_t *radio, struct csa_settings *csa_se
     csa_settings->freq_params.center_freq2 = 0;
     csa_settings->freq_params.bandwidth = bandwidth;
 
+    wifi_hal_info_print("%s:%d: CSA_PARAMS radio=%d channel=%d freq=%d center_freq1=%d "
+        "width=%d cs_count=%u block_tx=%u\n", __func__, __LINE__, radio->index,
+        param->channel, freq, freq1, bandwidth, csa_settings->cs_count, csa_settings->block_tx);
+
     wifi_hal_dbg_print("%s:%d chan_freq: %d center_freq: %d bandwidth: %d sec_chan_offset: %d\n",
         __func__, __LINE__, freq, freq1, bandwidth, sec_chan_offset);
     return 0;
@@ -8364,10 +8368,16 @@ static int notify_mld_partner_links(wifi_radio_info_t *radio, wifi_interface_inf
 
             wifi_hal_dbg_print("%s:%d interface: %s switch channel to %d\n", __func__, __LINE__,
                 interface_it->name, radio_it->oper_param.channel);
+        wifi_hal_info_print("%s:%d: CSA_HOSTAPD_ENTER radio=%d ifname=%s bss_started=%d requested_channel=%d\n",
+            __func__, __LINE__, radio_it->index, interface_it->name, interface_it->bss_started,
+            radio_it->oper_param.channel);
 
             pthread_mutex_lock(&g_wifi_hal.hapd_lock);
             ret = hostapd_switch_channel(&interface_it->u.ap.hapd, &csa_settings);
             pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+            wifi_hal_info_print("%s:%d: CSA_HOSTAPD_RESULT radio=%d ifname=%s requested_channel=%d ret=%d\n",
+                __func__, __LINE__, radio_it->index, interface_it->name,
+                radio_it->oper_param.channel, ret);
 
             if (ret != 0) {
                 wifi_hal_error_print("%s:%d: Error notifying link %d on radio %d switching "
@@ -8409,10 +8419,15 @@ int nl80211_switch_channel(wifi_radio_info_t *radio)
 
         wifi_hal_dbg_print("%s:%d interface: %s switch channel to %d\n", __func__, __LINE__,
             interface->name, radio->oper_param.channel);
+        wifi_hal_info_print("%s:%d: CSA_HOSTAPD_ENTER radio=%d ifname=%s bss_started=%d requested_channel=%d\n",
+            __func__, __LINE__, radio->index, interface->name, interface->bss_started,
+            radio->oper_param.channel);
 
         pthread_mutex_lock(&g_wifi_hal.hapd_lock);
         ret = hostapd_switch_channel(&interface->u.ap.hapd, &csa_settings);
         pthread_mutex_unlock(&g_wifi_hal.hapd_lock);
+        wifi_hal_info_print("%s:%d: CSA_HOSTAPD_RESULT radio=%d ifname=%s requested_channel=%d ret=%d\n",
+            __func__, __LINE__, radio->index, interface->name, radio->oper_param.channel, ret);
 
         /* Ignore the error if the error is not on first interface,
            as CSA would be in progress after the first interface channel switch. */
