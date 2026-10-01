@@ -975,9 +975,7 @@ INT wifi_hal_setRadioOperatingParameters(wifi_radio_index_t index, wifi_radio_op
                             __func__, __LINE__);
                         goto try_hostap_config_update;
                     } else {
-                        free(old_operationParam);
-                        old_operationParam = NULL;
-                        return RETURN_ERR;
+                        goto reload_config;
                     }
                 }
             }

@@ -829,12 +829,12 @@ static void nl80211_disconnect_event(wifi_interface_info_t *interface, struct nl
                 mgt_interface = get_private_vap_interface(radio);
             }
 
-            radio->radar_detected = false;
             if (mgt_interface == NULL) {
                 wifi_hal_error_print(
                     "%s:%d: [DFS-XLE] failed to find AP interface after mesh STA disconnect\n",
                     __func__, __LINE__);
             } else {
+                radio->radar_detected = false;
                 wifi_hal_info_print(
                     "%s:%d: [DFS-XLE] mesh STA disconnect confirmed; continue evacuation\n",
                     __func__, __LINE__);
