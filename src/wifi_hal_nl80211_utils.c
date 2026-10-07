@@ -3588,7 +3588,11 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
                     "%s:%d:Selected country op_class=%u (global=%u) for ch=%u bw=%d\n", __func__,
                     __LINE__, op_class->op_class, op_class->global_op_class, param->channel,
                     param->channelWidth);
-                return op_class->op_class;
+                wifi_hal_dbg_print("%s:%d: [LTE-3093] Returning global_op_class=%u "
+                    "for country_op_class=%u channel=%u bw=%d\n", __func__, __LINE__,
+                    op_class->global_op_class, op_class->op_class, param->channel,
+                    param->channelWidth);
+                return op_class->global_op_class;
             }
         }
     }
@@ -3612,8 +3616,11 @@ int get_op_class_from_radio_params(wifi_radio_operationParam_t *param)
         for (j = 0; j < op_class->num; j++) {
             if (op_class->ch_list[j] == param->channel) {
                 wifi_hal_dbg_print("%s:%d:Selected global op_class=%u for ch=%u bw=%d\n", __func__,
-                    __LINE__, op_class->op_class, param->channel, param->channelWidth);
-                return op_class->op_class;
+                    __LINE__, op_class->global_op_class, param->channel, param->channelWidth);
+                wifi_hal_dbg_print("%s:%d: [LTE-3093] Returning global fallback op_class=%u "
+                    "for channel=%u bw=%d\n", __func__, __LINE__, op_class->global_op_class,
+                    param->channel, param->channelWidth);
+                return op_class->global_op_class;
             }
         }
     }

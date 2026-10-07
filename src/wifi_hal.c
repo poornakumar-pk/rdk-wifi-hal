@@ -2574,10 +2574,16 @@ INT wifi_hal_startScan(wifi_radio_index_t index, wifi_neighborScanMode_t scan_mo
             continue;
         }
 
-        freq_list[freq_num] = ieee80211_chan_to_freq(country, op_class, param->channel);
-        if (freq_list[freq_num] == 0) {
+        if (RETURN_OK != wifi_channel_to_freq(country, op_class, param->channel,
+                &freq_list[freq_num])) {
+            wifi_hal_stats_error_print("%s:%d: [LTE-3093] Invalid frequency: country=%s "
+                "channel=%d global_op_class=%d\n", __func__, __LINE__, country,
+                param->channel, op_class);
             continue;
         }
+        wifi_hal_stats_dbg_print("%s:%d: [LTE-3093] Scan frequency: country=%s channel=%d "
+            "global_op_class=%d freq=%u\n", __func__, __LINE__, country, param->channel,
+            op_class, freq_list[freq_num]);
         sprintf(tmp_str, "%d ", freq_list[freq_num]);
         strcat(chan_list_str, tmp_str);
 
